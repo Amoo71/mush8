@@ -1,0 +1,69 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      game_files_url:
+        description: Google Drive link to the private ZIP or tar.gz archive
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          brew install xcodegen
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup target add aarch64-apple-ios --toolchain 1.98.1
+
+      - name: Fetch private game files
+        env:
+          GAME_FILES_ARCHIVE_URL: ${{ inputs.game_files_url || secrets.GAME_FILES_ARCHIVE_URL }}
+        run: |
+          test -n "$GAME_FILES_ARCHIVE_URL" || {
+            echo "Enter the Drive link when starting this workflow or set the GAME_FILES_ARCHIVE_URL repository secret."
+            exit 1
+          }
+          python3 -m venv "$RUNNER_TEMP/gdown-venv"
+          "$RUNNER_TEMP/gdown-venv/bin/pip" install --disable-pip-version-check gdown
+          "$RUNNER_TEMP/gdown-venv/bin/gdown" --fuzzy "$GAME_FILES_ARCHIVE_URL" \
+            --output "$RUNNER_TEMP/game-inputs.archive"
+          if /usr/bin/unzip -tq "$RUNNER_TEMP/game-inputs.archive" >/dev/null 2>&1; then
+            /usr/bin/unzip -q "$RUNNER_TEMP/game-inputs.archive" -d "$GITHUB_WORKSPACE"
+          else
+            tar -xzf "$RUNNER_TEMP/game-inputs.archive" -C "$GITHUB_WORKSPACE"
+          fi
+
+          if [[ -f base.nsz || -f update.nsz || -f upd4-0-1.nsz ]]; then
+            python3 -m venv "$RUNNER_TEMP/nsz-venv"
+            "$RUNNER_TEMP/nsz-venv/bin/pip" install --disable-pip-version-check nsz
+            for file in base.nsz update.nsz upd4-0-1.nsz; do
+              if [[ -f "$file" ]]; then
+                "$RUNNER_TEMP/nsz-venv/bin/nsz" -D "$file"
+              fi
+            done
+          fi
+
+          test -f base.nsp
+          test -f prod.keys
+          test -f update.nsp || test -f upd4-0-1.nsp
+
+      - name: Build IPA
+        run: ./make-ios.sh --ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mush8-IPA
+          path: build/Mush8.ipa
+          if-no-files-found: error
+          retention-days: 3
