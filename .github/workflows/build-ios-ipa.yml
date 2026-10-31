@@ -95,6 +95,8 @@ jobs:
           PY
 
           if [[ -f base.nsz || -f update.nsz ]]; then
+            mkdir -p "$HOME/.switch"
+            cp prod.keys "$HOME/.switch/prod.keys"
             python3 -m venv "$RUNNER_TEMP/nsz-venv"
             "$RUNNER_TEMP/nsz-venv/bin/pip" install --disable-pip-version-check nsz
             for file in base.nsz update.nsz; do
