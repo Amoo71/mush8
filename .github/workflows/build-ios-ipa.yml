@@ -85,11 +85,13 @@ jobs:
           print(f"Selected key input: {key_path.stat().st_size} bytes")
 
           dlc_candidates = [
-              path for path in files
+              (path.stat().st_size, path)
+              for path in files
               if 32 * 1024 < path.stat().st_size <= 2 * 1024 * 1024
           ]
           if dlc_candidates:
-              print(f"Found {len(dlc_candidates)} small optional file(s); DLC is not embedded in the IPA.")
+              dlc_size, _ = min(dlc_candidates, key=lambda item: abs(item[0] - 100_000))
+              print(f"Identified optional DLC-sized input: {dlc_size} bytes; DLC is not embedded in the IPA.")
           PY
 
           if [[ -f base.nsz || -f update.nsz ]]; then
