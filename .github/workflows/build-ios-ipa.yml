@@ -2,11 +2,6 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
-    inputs:
-      game_files_url:
-        description: Google Drive link to the private ZIP or tar.gz archive
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -27,15 +22,15 @@ jobs:
 
       - name: Fetch private game files
         env:
-          GAME_FILES_ARCHIVE_URL: ${{ inputs.game_files_url || secrets.GAME_FILES_ARCHIVE_URL }}
+          GAME_FILES_ARCHIVE_URL: ${{ secrets.GAME_FILES_ARCHIVE_URL }}
         run: |
           test -n "$GAME_FILES_ARCHIVE_URL" || {
-            echo "Enter the Drive link when starting this workflow or set the GAME_FILES_ARCHIVE_URL repository secret."
+            echo "Set the GAME_FILES_ARCHIVE_URL repository Actions secret to your Drive link."
             exit 1
           }
           python3 -m venv "$RUNNER_TEMP/gdown-venv"
           "$RUNNER_TEMP/gdown-venv/bin/pip" install --disable-pip-version-check gdown
-          "$RUNNER_TEMP/gdown-venv/bin/gdown" --fuzzy "$GAME_FILES_ARCHIVE_URL" \
+          "$RUNNER_TEMP/gdown-venv/bin/gdown" "$GAME_FILES_ARCHIVE_URL" \
             --output "$RUNNER_TEMP/game-inputs.archive"
           if /usr/bin/unzip -tq "$RUNNER_TEMP/game-inputs.archive" >/dev/null 2>&1; then
             /usr/bin/unzip -q "$RUNNER_TEMP/game-inputs.archive" -d "$GITHUB_WORKSPACE"
