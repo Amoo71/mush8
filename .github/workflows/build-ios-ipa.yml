@@ -38,6 +38,15 @@ jobs:
             tar -xzf "$RUNNER_TEMP/game-inputs.archive" -C "$GITHUB_WORKSPACE"
           fi
 
+          for file in prod.keys base.nsp base.nsz update.nsp update.nsz upd4-0-1.nsp upd4-0-1.nsz; do
+            if [[ ! -f "$file" ]]; then
+              nested_file="$(find "$GITHUB_WORKSPACE" -type f -name "$file" -print -quit)"
+              if [[ -n "$nested_file" ]]; then
+                cp "$nested_file" "$GITHUB_WORKSPACE/$file"
+              fi
+            fi
+          done
+
           if [[ -f base.nsz || -f update.nsz || -f upd4-0-1.nsz ]]; then
             python3 -m venv "$RUNNER_TEMP/nsz-venv"
             "$RUNNER_TEMP/nsz-venv/bin/pip" install --disable-pip-version-check nsz
@@ -48,9 +57,16 @@ jobs:
             done
           fi
 
-          test -f base.nsp
-          test -f prod.keys
-          test -f update.nsp || test -f upd4-0-1.nsp
+          missing_inputs=()
+          [[ -f base.nsp ]] || missing_inputs+=("base.nsp or base.nsz")
+          [[ -f prod.keys ]] || missing_inputs+=("prod.keys")
+          [[ -f update.nsp || -f upd4-0-1.nsp ]] || missing_inputs+=("update.nsp/update.nsz or upd4-0-1.nsp/upd4-0-1.nsz")
+          if (( ${#missing_inputs[@]} > 0 )); then
+            echo "::error::Missing required archive inputs: ${missing_inputs[*]}. Use these exact filenames."
+            echo "Matching files found in the archive:"
+            find "$GITHUB_WORKSPACE" -type f \( -name 'base.*' -o -name 'prod.keys' -o -name 'update.*' -o -name 'upd4-0-1.*' \) -print
+            exit 1
+          fi
 
       - name: Build IPA
         run: ./make-ios.sh --ipa
