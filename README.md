@@ -56,7 +56,7 @@ Or make an `.ipa` to install with AltStore / SideStore :
 ```
 it ends up in `build/Mush8.ipa`
 
-Without a Mac, you can build it with the `Build iOS IPA` GitHub Actions workflow. Create a `.zip` or `.tar.gz` archive containing `prod.keys`, `base.nsp` or `base.nsz`, and `update.nsp`, `update.nsz`, `upd4-0-1.nsp`, or `upd4-0-1.nsz` at its root. NSZ files are converted to NSP during the workflow. Upload the archive to Google Drive, set access to "Anyone with the link", then save the Drive link as the repository Actions secret `GAME_FILES_ARCHIVE_URL` under Settings → Secrets and variables → Actions. Run the workflow from the Actions tab. The link can be used by anyone who gets it, so do not share it publicly. Download the `Mush8-IPA` artifact when it finishes; it is retained for 3 days. Keep the archive out of the repository.
+Without a Mac, you can build it with the `Build iOS IPA` GitHub Actions workflow. Create a `.zip` or `.tar.gz` archive containing your key file (about 10-15 KB), the base game (about 6 GB), and the update (about 4 GB or larger). File names and folders inside the archive do not matter; NSP/NSZ files must keep their `.nsp` or `.nsz` extension. The workflow identifies the files by size and converts NSZ to NSP. A small DLC file may also be included, but it is not embedded in the IPA. Upload the archive to Google Drive, set access to "Anyone with the link", then save the Drive link as the repository Actions secret `GAME_FILES_ARCHIVE_URL` under Settings → Secrets and variables → Actions. Run the workflow from the Actions tab. The link can be used by anyone who gets it, so do not share it publicly. Download the `Mush8-IPA` artifact when it finishes; it is retained for 3 days. Keep the archive out of the repository.
 
 Tests :
 ```

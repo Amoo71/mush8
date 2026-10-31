@@ -32,40 +32,74 @@ jobs:
           "$RUNNER_TEMP/gdown-venv/bin/pip" install --disable-pip-version-check gdown
           "$RUNNER_TEMP/gdown-venv/bin/gdown" "$GAME_FILES_ARCHIVE_URL" \
             --output "$RUNNER_TEMP/game-inputs.archive"
+          INPUTS_DIR="$RUNNER_TEMP/game-inputs"
+          mkdir -p "$INPUTS_DIR"
           if /usr/bin/unzip -tq "$RUNNER_TEMP/game-inputs.archive" >/dev/null 2>&1; then
-            /usr/bin/unzip -q "$RUNNER_TEMP/game-inputs.archive" -d "$GITHUB_WORKSPACE"
+            /usr/bin/unzip -q "$RUNNER_TEMP/game-inputs.archive" -d "$INPUTS_DIR"
           else
-            tar -xzf "$RUNNER_TEMP/game-inputs.archive" -C "$GITHUB_WORKSPACE"
+            tar -xzf "$RUNNER_TEMP/game-inputs.archive" -C "$INPUTS_DIR"
           fi
 
-          for file in prod.keys base.nsp base.nsz update.nsp update.nsz upd4-0-1.nsp upd4-0-1.nsz; do
-            if [[ ! -f "$file" ]]; then
-              nested_file="$(find "$GITHUB_WORKSPACE" -type f -name "$file" -print -quit)"
-              if [[ -n "$nested_file" ]]; then
-                cp "$nested_file" "$GITHUB_WORKSPACE/$file"
-              fi
-            fi
-          done
+          python3 - "$INPUTS_DIR" "$GITHUB_WORKSPACE" <<'PY'
+          import shutil
+          import sys
+          from pathlib import Path
 
-          if [[ -f base.nsz || -f update.nsz || -f upd4-0-1.nsz ]]; then
+          input_root = Path(sys.argv[1])
+          workspace = Path(sys.argv[2])
+          files = [path for path in input_root.rglob("*") if path.is_file()]
+
+          key_candidates = [
+              (path.stat().st_size, path)
+              for path in files
+              if 8 * 1024 <= path.stat().st_size <= 32 * 1024
+          ]
+          large_candidates = [
+              (path.stat().st_size, path)
+              for path in files
+              if path.suffix.lower() in {".nsp", ".nsz"}
+              and path.stat().st_size >= 3_000_000_000
+          ]
+
+          missing = []
+          if not key_candidates:
+              missing.append("prod.keys-sized file (8-32 KiB)")
+          if len(large_candidates) < 2:
+              missing.append("two large .nsp/.nsz files (base about 6 GB, update 4 GB or larger)")
+          if missing:
+              print("::error::Could not identify required archive inputs: " + "; ".join(missing))
+              print("Large NSP/NSZ sizes found (bytes): " + ", ".join(str(size) for size, _ in sorted(large_candidates, reverse=True)))
+              print("Small key-sized files found (bytes): " + ", ".join(str(size) for size, _ in key_candidates))
+              sys.exit(1)
+
+          key_path = min(key_candidates, key=lambda item: abs(item[0] - 12_500))[1]
+          base_candidate = min(large_candidates, key=lambda item: abs(item[0] - 6_000_000_000))
+          update_candidates = [item for item in large_candidates if item[1] != base_candidate[1]]
+          update_candidate = min(update_candidates, key=lambda item: abs(item[0] - 4_000_000_000))
+
+          shutil.copy2(key_path, workspace / "prod.keys")
+          for target_name, candidate in (("base", base_candidate), ("update", update_candidate)):
+              target = workspace / f"{target_name}{candidate[1].suffix.lower()}"
+              shutil.copy2(candidate[1], target)
+              print(f"Selected {target_name} input: {candidate[0]} bytes")
+          print(f"Selected key input: {key_path.stat().st_size} bytes")
+
+          dlc_candidates = [
+              path for path in files
+              if 32 * 1024 < path.stat().st_size <= 2 * 1024 * 1024
+          ]
+          if dlc_candidates:
+              print(f"Found {len(dlc_candidates)} small optional file(s); DLC is not embedded in the IPA.")
+          PY
+
+          if [[ -f base.nsz || -f update.nsz ]]; then
             python3 -m venv "$RUNNER_TEMP/nsz-venv"
             "$RUNNER_TEMP/nsz-venv/bin/pip" install --disable-pip-version-check nsz
-            for file in base.nsz update.nsz upd4-0-1.nsz; do
+            for file in base.nsz update.nsz; do
               if [[ -f "$file" ]]; then
                 "$RUNNER_TEMP/nsz-venv/bin/nsz" -D "$file"
               fi
             done
-          fi
-
-          missing_inputs=()
-          [[ -f base.nsp ]] || missing_inputs+=("base.nsp or base.nsz")
-          [[ -f prod.keys ]] || missing_inputs+=("prod.keys")
-          [[ -f update.nsp || -f upd4-0-1.nsp ]] || missing_inputs+=("update.nsp/update.nsz or upd4-0-1.nsp/upd4-0-1.nsz")
-          if (( ${#missing_inputs[@]} > 0 )); then
-            echo "::error::Missing required archive inputs: ${missing_inputs[*]}. Use these exact filenames."
-            echo "Matching files found in the archive:"
-            find "$GITHUB_WORKSPACE" -type f \( -name 'base.*' -o -name 'prod.keys' -o -name 'update.*' -o -name 'upd4-0-1.*' \) -print
-            exit 1
           fi
 
       - name: Build IPA
